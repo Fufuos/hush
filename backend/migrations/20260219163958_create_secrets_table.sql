@@ -1,0 +1,7 @@
+CREATE TABLE secrets (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT UNIQUE NOT NULL,
+    ciphertext BLOB NOT NULL,
+    nonce BLOB NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
