@@ -21,7 +21,11 @@ pub struct SecretResponse {
     pub name: String,
     pub secret: EncryptedSecret,
 }
-
+#[derive(Deserialize)]
+pub struct UpdateSecretRequest {
+    pub new_name: String,
+    pub secret: EncryptedSecret,
+}
 /// POST /secrets
 pub async fn create_secret(
     Extension(pool): Extension<SqlitePool>,
@@ -80,4 +84,78 @@ pub async fn get_secret(
         }
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+pub async fn list_secrets(
+    Extension(pool): Extension<SqlitePool>,
+) -> Result<Json<Vec<SecretResponse>>, StatusCode> {
+    // Notice we use fetch_all instead of fetch_optional
+    let records = sqlx::query!("SELECT id, name, ciphertext, nonce FROM secrets")
+        .fetch_all(&pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Map the database rows into our JSON response structs
+    let response: Vec<SecretResponse> = records
+        .into_iter()
+        .map(|row| SecretResponse {
+            id: row.id,
+            name: row.name,
+            secret: EncryptedSecret {
+                ciphertext: row.ciphertext,
+                nonce: row.nonce,
+            },
+        })
+        .collect();
+
+    Ok(Json(response))
+}
+
+// Make sure you have `Path` imported at the top if it isn't already:
+// use axum::extract::Path;
+
+/// DELETE /secrets/{name}
+pub async fn delete_secret(
+    Path(name): Path<String>,
+    Extension(pool): Extension<SqlitePool>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query!("DELETE FROM secrets WHERE name = ?", name)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            eprintln!("❌ Database error in delete_secret: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // If no rows were deleted, the secret didn't exist
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // 204 No Content is the standard HTTP response for a successful delete
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// PUT /secrets/:name
+pub async fn update_secret(
+    Path(name): Path<String>,
+    Extension(pool): Extension<SqlitePool>,
+    Json(payload): Json<UpdateSecretRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query!(
+        "UPDATE secrets SET name = ?, ciphertext = ?, nonce = ? WHERE name = ?",
+        payload.new_name,
+        payload.secret.ciphertext,
+        payload.secret.nonce,
+        name
+    )
+    .execute(&pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    Ok(StatusCode::OK)
 }

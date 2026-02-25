@@ -1,15 +1,15 @@
-use axum::{
-    Extension, Router,
-    routing::{get, post},
-};
+use crate::handlers::{create_secret, delete_secret, get_secret, list_secrets, update_secret};
+use axum::{Extension, Router, routing::get};
 use sqlx::SqlitePool;
-
-use crate::handlers::{create_secret, get_secret};
 
 pub fn create_router(pool: SqlitePool) -> Router {
     Router::new()
-        .route("/secrets", post(create_secret))
-        .route("/secrets/{name}", get(get_secret))
-        // Share the DB pool with all routes
+        .route("/secrets", get(list_secrets).post(create_secret))
+        // Chain the GET and DELETE handlers together
+        // Update this line:
+        .route(
+            "/secrets/{name}",
+            get(get_secret).delete(delete_secret).put(update_secret),
+        )
         .layer(Extension(pool))
 }

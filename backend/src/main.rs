@@ -11,7 +11,11 @@ async fn main() {
         dotenvy::dotenv().ok();
     }
 
-    let pool = database::connect().await;
+    // Get the DB URL, defaulting to a local file if not set
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://hush.db".to_string());
+
+    // Initialize the DB pool using our bulletproof function
+    let pool = database::init_db(&db_url).await;
 
     let app = routes::create_router(pool);
 
